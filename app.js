@@ -27,13 +27,14 @@
   let state = loadState();
   let wakeLock = null;
   let audioContext = null;
+  let displayInterval = null;
   let toastTimer = null;
   let saveTimer = null;
   let holdStartedAt = null;
   let holdFrame = null;
 
   const els = {
-    sessionElapsed: $("#sessionElapsed"), timerStage: $("#timerStage"), timerTitle: $("#timerTitle"),
+    timerStage: $("#timerStage"), timerTitle: $("#timerTitle"),
     timerDisplay: $("#timerDisplay"), timerDetail: $("#timerDetail"), toggleTimer: $("#toggleTimer"),
     resetTimer: $("#resetTimer"), lapTimer: $("#lapTimer"), laps: $("#laps"),
     countdownConfig: $("#countdownConfig"), intervalConfig: $("#intervalConfig"),
@@ -90,10 +91,6 @@
     return new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false }).format(timestamp);
   }
 
-  function sessionOffset(timestamp = Date.now()) {
-    return formatClock(Math.max(0, timestamp - state.sessionStartedAt));
-  }
-
   function getStopwatchElapsed(now = Date.now()) {
     const sw = state.stopwatch;
     return sw.accumulatedMs + (sw.status === "running" && sw.startedAt ? Math.max(0, now - sw.startedAt) : 0);
@@ -112,6 +109,16 @@
 
   function isAnyTimerRunning() {
     return state.stopwatch.status === "running" || state.countdown.status === "running" || state.intervals.status === "running";
+  }
+
+  function syncDisplayLoop() {
+    const shouldRun = isAnyTimerRunning() && document.visibilityState === "visible";
+    if (shouldRun && displayInterval === null) {
+      displayInterval = setInterval(() => renderTimer(Date.now()), 100);
+    } else if (!shouldRun && displayInterval !== null) {
+      clearInterval(displayInterval);
+      displayInterval = null;
+    }
   }
 
   function pauseOtherTimers(except) {
@@ -174,15 +181,6 @@
   function signal(kind = "phase") {
     if (audioContext?.state === "running") beep(kind);
     else if (audioContext && audioContext.state !== "closed") audioContext.resume().then(() => beep(kind)).catch(() => {});
-    if (navigator.vibrate) {
-      const patterns = {
-        work: [110, 70, 110, 70, 110],
-        rest: [180, 100, 180],
-        finish: [180, 90, 180, 90, 260],
-        phase: [110]
-      };
-      navigator.vibrate(patterns[kind] || patterns.phase);
-    }
   }
 
   async function requestWakeLock() {
@@ -201,6 +199,7 @@
   }
 
   function syncWakeLock() {
+    syncDisplayLoop();
     if (isAnyTimerRunning()) requestWakeLock(); else releaseWakeLock();
   }
 
@@ -312,7 +311,7 @@
       const meta = document.createElement("time");
       meta.className = "note-meta";
       meta.dateTime = new Date(note.createdAt).toISOString();
-      meta.textContent = `${realTime(note.createdAt)}  ·  +${formatClock(note.offsetMs)}`;
+      meta.textContent = realTime(note.createdAt);
       const text = document.createElement("p");
       text.className = "note-text";
       text.textContent = note.text;
@@ -412,7 +411,7 @@
     const text = els.noteInput.value.trim();
     if (!text) { showToast("Escribí o dictá una nota primero"); return; }
     const createdAt = Date.now();
-    state.notes.push({ id: `${createdAt}-${Math.random().toString(36).slice(2, 7)}`, text, createdAt, offsetMs: Math.max(0, createdAt - state.sessionStartedAt) });
+    state.notes.push({ id: `${createdAt}-${Math.random().toString(36).slice(2, 7)}`, text, createdAt });
     state.draft = "";
     saveState(true);
     renderStatic();
@@ -423,10 +422,10 @@
     const value = typeof text === "string" ? text.trim() : "";
     if (!value) throw new TypeError("La nota no puede estar vacía");
     const createdAt = Date.now();
-    state.notes.push({ id: `${createdAt}-${Math.random().toString(36).slice(2, 7)}`, text: value, createdAt, offsetMs: Math.max(0, createdAt - state.sessionStartedAt) });
+    state.notes.push({ id: `${createdAt}-${Math.random().toString(36).slice(2, 7)}`, text: value, createdAt });
     saveState(true);
     renderStatic();
-    return { saved: true, createdAt, sessionOffset: formatClock(createdAt - state.sessionStartedAt), noteCount: state.notes.length };
+    return { saved: true, createdAt, noteCount: state.notes.length };
   }
 
   function sessionSummary() {
@@ -436,12 +435,11 @@
       "TREINONANOGPT — SESIÓN",
       `Fecha: ${date}`,
       `Inicio: ${realTime(state.sessionStartedAt)}`,
-      `Duración al copiar: ${formatClock(Date.now() - state.sessionStartedAt)}`,
       `Series contadas: ${state.sets}`,
       "",
       "NOTAS"
     ];
-    if (state.notes.length) state.notes.forEach((note) => lines.push(`[${realTime(note.createdAt)} | +${formatClock(note.offsetMs)}] ${note.text}`));
+    if (state.notes.length) state.notes.forEach((note) => lines.push(`[${realTime(note.createdAt)}] ${note.text}`));
     else lines.push("(Sin notas)");
     if (state.draft.trim()) lines.push("", `BORRADOR SIN AGREGAR: ${state.draft.trim()}`);
     lines.push("", "— Exportado desde TreinoNanoGpt");
@@ -533,27 +531,23 @@
       reconcileIntervals(Date.now(), true);
       syncWakeLock();
       renderTimer();
-    } else if (wakeLock) releaseWakeLock();
+    } else {
+      syncDisplayLoop();
+      if (wakeLock) releaseWakeLock();
+    }
   });
   window.addEventListener("pagehide", () => saveState(true));
-
-  function tick() {
-    const now = Date.now();
-    els.sessionElapsed.textContent = formatClock(now - state.sessionStartedAt);
-    renderTimer(now);
-  }
 
   renderStatic();
   reconcileIntervals(Date.now(), false);
   syncWakeLock();
-  setInterval(tick, 100);
 
   if (document.modelContext?.registerTool) {
     try {
       Promise.resolve(document.modelContext.registerTool({
         name: "add_session_note",
         title: "Agregar nota de sesión",
-        description: "Agrega una nota libre al entrenamiento actual con la hora y el tiempo de sesión automáticos.",
+        description: "Agrega una nota libre al entrenamiento actual con la hora automática.",
         inputSchema: {
           type: "object",
           properties: { text: { type: "string", minLength: 1, maxLength: 5000 } },

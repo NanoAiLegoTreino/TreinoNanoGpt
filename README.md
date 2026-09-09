@@ -6,7 +6,7 @@ PWA móvil, local y sin dependencias para capturar una sesión de entrenamiento:
 
 - `index.html`: interfaz accesible de una sola vista y diálogo de copia manual.
 - `styles.css`: diseño mobile-first, tema oscuro, zonas táctiles grandes y adaptación a pantallas más amplias.
-- `app.js`: timers basados en timestamps absolutos, notas, series, persistencia, Wake Lock, sonido, vibración y exportación.
+- `app.js`: timers basados en timestamps absolutos, notas, series, persistencia, Wake Lock, sonido y exportación.
 - `manifest.json`: metadatos de instalación PWA.
 - `service-worker.js`: caché offline del shell estático.
 - `assets/images/original/logotreinonanogpt-original.png`: copia intacta del logo fuente aportado por el usuario.
@@ -51,7 +51,6 @@ La opción de instalación puede tardar unos segundos en aparecer durante la pri
 - **Autoguardado:** estado de sesión, borrador, notas, series, configuraciones y timers se guardan en `localStorage`. Un timer en marcha conserva sus timestamps y se recupera al reabrir.
 - **Wake Lock:** se solicita únicamente al iniciar o reanudar un timer, se libera al pausar/finalizar y se vuelve a solicitar al regresar al foreground. Algunos modos de ahorro de batería o versiones de Chrome pueden rechazarlo; el timer sigue funcionando correctamente.
 - **Sonido:** el `AudioContext` se crea o reactiva tras tocar Iniciar/Reanudar, como exige Chrome Android. Cada WORK comienza con tres pitidos agudos de 950 Hz y cada REST con dos pitidos graves de 650 Hz; duran 250 ms y se separan 150 ms. El final conserva su secuencia propia.
-- **Vibración:** acompaña al sonido si `navigator.vibrate` está disponible. No es el único aviso y puede estar deshabilitada por el sistema.
 - **Portapapeles:** primero usa Clipboard API. Si el navegador la rechaza, se abre un diálogo con todo el resumen seleccionado para copiar manualmente.
 - **Nueva sesión:** exige mantener pulsado el botón durante dos segundos, también con Enter o Espacio desde teclado. Al completarse elimina la sesión local actual; no afecta ningún otro dato del teléfono o navegador.
 

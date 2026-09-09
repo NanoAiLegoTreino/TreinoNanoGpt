@@ -42,7 +42,7 @@ button { touch-action: manipulation; }
 .topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   padding: 2px 4px 16px;
 }
@@ -67,10 +67,6 @@ h2 { margin-top: 3px; font-size: 1.15rem; letter-spacing: -.02em; }
   font-weight: 800;
   letter-spacing: .16em;
 }
-
-.session-clock { text-align: right; }
-.session-clock span { display: block; color: var(--muted); font-size: .62rem; font-weight: 700; letter-spacing: .12em; }
-.session-clock strong { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
 
 main { display: grid; gap: 12px; }
 .timer-card, .sets-card, .notes-card {
