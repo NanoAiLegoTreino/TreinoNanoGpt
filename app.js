@@ -133,35 +133,56 @@
     }
   }
 
-  function unlockAudio() {
+  async function unlockAudio() {
     if (!audioContext) {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (AudioCtx) audioContext = new AudioCtx();
     }
-    if (audioContext?.state === "suspended") audioContext.resume().catch(() => {});
+    if (audioContext && audioContext.state !== "running" && audioContext.state !== "closed") {
+      try { await audioContext.resume(); } catch (_) {}
+    }
+    return audioContext?.state === "running";
   }
 
   function beep(kind = "phase") {
     if (!audioContext || audioContext.state !== "running") return;
+    const profiles = {
+      work: { frequency: 950, count: 3, duration: .25, gap: .15, volume: .36 },
+      rest: { frequency: 650, count: 2, duration: .25, gap: .15, volume: .34 },
+      finish: { frequency: 880, count: 3, duration: .14, gap: .03, volume: .18 },
+      phase: { frequency: 660, count: 1, duration: .14, gap: 0, volume: .18 }
+    };
+    const profile = profiles[kind] || profiles.phase;
     const now = audioContext.currentTime;
-    const pulses = kind === "finish" ? [0, .17, .34] : [0];
-    pulses.forEach((offset) => {
+    for (let index = 0; index < profile.count; index += 1) {
+      const start = now + index * (profile.duration + profile.gap);
+      const release = start + profile.duration - .025;
       const osc = audioContext.createOscillator();
       const gain = audioContext.createGain();
-      osc.frequency.value = kind === "finish" ? 880 : 660;
+      osc.frequency.value = profile.frequency;
       osc.type = "sine";
-      gain.gain.setValueAtTime(.0001, now + offset);
-      gain.gain.exponentialRampToValueAtTime(.18, now + offset + .012);
-      gain.gain.exponentialRampToValueAtTime(.0001, now + offset + .13);
+      gain.gain.setValueAtTime(.0001, start);
+      gain.gain.exponentialRampToValueAtTime(profile.volume, start + .015);
+      gain.gain.setValueAtTime(profile.volume, release);
+      gain.gain.exponentialRampToValueAtTime(.0001, start + profile.duration);
       osc.connect(gain).connect(audioContext.destination);
-      osc.start(now + offset);
-      osc.stop(now + offset + .14);
-    });
+      osc.start(start);
+      osc.stop(start + profile.duration);
+    }
   }
 
   function signal(kind = "phase") {
-    beep(kind);
-    if (navigator.vibrate) navigator.vibrate(kind === "finish" ? [180, 90, 180, 90, 260] : [110]);
+    if (audioContext?.state === "running") beep(kind);
+    else if (audioContext && audioContext.state !== "closed") audioContext.resume().then(() => beep(kind)).catch(() => {});
+    if (navigator.vibrate) {
+      const patterns = {
+        work: [110, 70, 110, 70, 110],
+        rest: [180, 100, 180],
+        finish: [180, 90, 180, 90, 260],
+        phase: [110]
+      };
+      navigator.vibrate(patterns[kind] || patterns.phase);
+    }
   }
 
   async function requestWakeLock() {
@@ -213,7 +234,8 @@
     }
     if (changed) {
       saveState(true);
-      if (notify) signal("phase");
+      const phaseType = phases[timer.phaseIndex]?.type;
+      if (notify && (phaseType === "work" || phaseType === "rest")) signal(phaseType);
     }
   }
 
@@ -328,8 +350,8 @@
     renderTimer();
   }
 
-  function toggleCurrentTimer() {
-    unlockAudio();
+  async function toggleCurrentTimer() {
+    await unlockAudio();
     const now = Date.now();
     pauseOtherTimers(state.mode);
     if (state.mode === "stopwatch") {
@@ -356,6 +378,7 @@
     } else {
       const timer = state.intervals;
       const phases = intervalPhases();
+      const beginsIntervalSession = timer.status === "idle" || timer.status === "finished";
       if (timer.status === "running") {
         timer.pausedRemainingMs = Math.max(0, timer.phaseEndsAt - now);
         timer.phaseEndsAt = null;
@@ -368,6 +391,7 @@
         const phase = phases[timer.phaseIndex];
         timer.phaseEndsAt = now + Math.max(1, timer.pausedRemainingMs ?? phase.durationMs);
         timer.status = "running";
+        if (beginsIntervalSession && phase.type === "work") signal("work");
       }
     }
     saveState(true);
