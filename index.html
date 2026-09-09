@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101512">
+  <meta name="description" content="Cronómetros, series y notas rápidas para entrenar sin distracciones.">
+  <meta name="color-scheme" content="dark">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="./assets/images/icons/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="icon" href="./assets/images/icons/favicon-48.png" sizes="48x48" type="image/png">
+  <link rel="apple-touch-icon" href="./assets/images/icons/icon-192.png">
+  <link rel="stylesheet" href="./styles.css">
+  <title>TreinoNanoGpt</title>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-identity">
+        <img class="brand-logo" src="./assets/images/brand/logo-header.png" width="48" height="48" alt="Logo de TreinoNanoGpt">
+        <div class="brand-copy">
+          <p class="eyebrow">SESIÓN ACTIVA</p>
+          <h1>TreinoNanoGpt</h1>
+        </div>
+      </div>
+      <div class="session-clock" aria-label="Tiempo de sesión">
+        <span>SESIÓN</span>
+        <strong id="sessionElapsed">00:00</strong>
+      </div>
+    </header>
+
+    <main>
+      <section class="timer-card" aria-labelledby="timerTitle">
+        <nav class="mode-tabs" aria-label="Tipo de temporizador">
+          <button class="mode-tab active" data-mode="stopwatch" aria-pressed="true">Cronómetro</button>
+          <button class="mode-tab" data-mode="countdown" aria-pressed="false">Cuenta atrás</button>
+          <button class="mode-tab" data-mode="intervals" aria-pressed="false">Intervalos</button>
+        </nav>
+
+        <div class="timer-stage" id="timerStage">
+          <p class="timer-kicker" id="timerTitle">LISTO</p>
+          <output class="timer-display" id="timerDisplay" aria-live="off">00:00.0</output>
+          <p class="timer-detail" id="timerDetail">Tocá iniciar cuando estés listo</p>
+        </div>
+
+        <div class="config-panel" id="countdownConfig" hidden>
+          <label>Duración</label>
+          <div class="duration-inputs">
+            <label><input id="countdownMinutes" type="number" min="0" max="599" inputmode="numeric" value="1"><span>min</span></label>
+            <label><input id="countdownSeconds" type="number" min="0" max="59" inputmode="numeric" value="0"><span>seg</span></label>
+          </div>
+        </div>
+
+        <div class="config-panel interval-config" id="intervalConfig" hidden>
+          <label>Configuración</label>
+          <div class="interval-grid">
+            <label><span>Warm-up</span><input id="warmupSeconds" type="number" min="0" max="3599" inputmode="numeric" value="60"><small>seg</small></label>
+            <label><span>Work</span><input id="workSeconds" type="number" min="1" max="3599" inputmode="numeric" value="40"><small>seg</small></label>
+            <label><span>Rest</span><input id="restSeconds" type="number" min="0" max="3599" inputmode="numeric" value="20"><small>seg</small></label>
+            <label><span>Rondas</span><input id="rounds" type="number" min="1" max="99" inputmode="numeric" value="8"><small>total</small></label>
+          </div>
+        </div>
+
+        <div class="timer-controls">
+          <button class="control-button secondary" id="resetTimer">Reset</button>
+          <button class="control-button primary" id="toggleTimer">Iniciar</button>
+          <button class="control-button secondary" id="lapTimer">Vuelta</button>
+        </div>
+        <ol class="laps" id="laps" aria-label="Vueltas del cronómetro" hidden></ol>
+      </section>
+
+      <section class="sets-card" aria-labelledby="setsTitle">
+        <div>
+          <p class="section-label" id="setsTitle">SERIES</p>
+          <output id="setCount" class="set-count" aria-live="polite">0</output>
+        </div>
+        <div class="set-controls">
+          <button id="decrementSet" class="step-button" aria-label="Restar una serie">−1</button>
+          <button id="incrementSet" class="step-button add" aria-label="Sumar una serie">+1</button>
+          <button id="resetSets" class="text-button">Reset</button>
+        </div>
+      </section>
+
+      <section class="notes-card" aria-labelledby="notesTitle">
+        <div class="section-heading">
+          <div>
+            <p class="section-label">CAPTURA LIBRE</p>
+            <h2 id="notesTitle">Notas de sesión</h2>
+          </div>
+          <span id="notesCount" class="count-badge">0</span>
+        </div>
+        <label class="sr-only" for="noteInput">Nueva nota de sesión</label>
+        <textarea id="noteInput" rows="3" placeholder="Tocá aquí y usá el dictado del teclado Samsung…"></textarea>
+        <div class="note-actions">
+          <span>Se agrega hora + tiempo de sesión</span>
+          <button id="addNote" class="add-note-button">Agregar nota</button>
+        </div>
+        <div id="notesList" class="notes-list" aria-live="polite"></div>
+      </section>
+
+      <button id="copySession" class="copy-button">COPIAR PARA CHATGPT</button>
+
+      <button id="newSession" class="new-session-button" aria-label="Mantener pulsado dos segundos para iniciar una nueva sesión">
+        <span class="hold-fill" aria-hidden="true"></span>
+        <span class="hold-content">NUEVA SESIÓN <small>Mantener 2 segundos</small></span>
+      </button>
+      <p class="local-note">Todo queda guardado únicamente en este dispositivo.</p>
+    </main>
+  </div>
+
+  <dialog id="copyFallback">
+    <form method="dialog" class="dialog-card">
+      <div class="section-heading">
+        <div>
+          <p class="section-label">COPIA MANUAL</p>
+          <h2>Seleccioná el texto</h2>
+        </div>
+        <button class="dialog-close" value="cancel" aria-label="Cerrar">×</button>
+      </div>
+      <p>El portapapeles no estuvo disponible. El texto quedó seleccionado para copiarlo manualmente.</p>
+      <textarea id="fallbackText" rows="12" readonly></textarea>
+      <button class="control-button primary" value="cancel">Listo</button>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="./app.js" defer></script>
+</body>
+</html>
