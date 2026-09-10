@@ -48,11 +48,12 @@ La opción de instalación puede tardar unos segundos en aparecer durante la pri
 ## Comportamiento técnico
 
 - **Timers robustos:** `setInterval` solo refresca la pantalla. El tiempo real se calcula desde timestamps absolutos (`Date.now()`), incluidos deadlines de countdown e intervalos. Si Android suspende la pestaña, al regresar se reconstruye el tiempo correcto y se saltan las fases ya transcurridas.
-- **Autoguardado:** estado de sesión, borrador, notas, series, configuraciones y timers se guardan en `localStorage`. Un timer en marcha conserva sus timestamps y se recupera al reabrir.
+- **Autoguardado:** historial de actividades, estado de sesión, borrador, notas, series, configuraciones y timers se guardan en `localStorage`. Un timer en marcha conserva sus timestamps y se recupera al reabrir.
 - **Wake Lock:** se solicita únicamente al iniciar o reanudar un timer, se libera al pausar/finalizar y se vuelve a solicitar al regresar al foreground. Algunos modos de ahorro de batería o versiones de Chrome pueden rechazarlo; el timer sigue funcionando correctamente.
 - **Sonido:** el `AudioContext` se crea o reactiva tras tocar Iniciar/Reanudar, como exige Chrome Android. Cada WORK comienza con tres pitidos agudos de 950 Hz y cada REST con dos pitidos graves de 650 Hz; duran 250 ms y se separan 150 ms. El final conserva su secuencia propia.
 - **Portapapeles:** primero usa Clipboard API. Si el navegador la rechaza, se abre un diálogo con todo el resumen seleccionado para copiar manualmente.
-- **Nueva sesión:** exige mantener pulsado el botón durante dos segundos, también con Enter o Espacio desde teclado. Al completarse elimina la sesión local actual; no afecta ningún otro dato del teléfono o navegador.
+- **Historial exportable:** resetear un timer con actividad archiva ese bloque; countdown e intervalos también se archivan al completarse. Copiar combina el historial con cualquier timer actual todavía no reseteado, sin modificar ni duplicar el estado.
+- **Nueva sesión:** exige mantener pulsado el botón durante dos segundos, también con Enter o Espacio desde teclado. Al completarse elimina la sesión local actual, incluido su historial; no afecta ningún otro dato del teléfono o navegador.
 
 ## Limitaciones conocidas
 

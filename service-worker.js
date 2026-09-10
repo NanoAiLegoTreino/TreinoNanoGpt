@@ -1,4 +1,4 @@
-const CACHE_NAME = "treino-nano-gpt-v5";
+const CACHE_NAME = "treino-nano-gpt-v6";
 const APP_SHELL = [
   "./",
   "./index.html",

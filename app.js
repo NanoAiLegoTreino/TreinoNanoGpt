@@ -9,14 +9,17 @@
     sets: 0,
     notes: [],
     draft: "",
-    stopwatch: { status: "idle", startedAt: null, accumulatedMs: 0, laps: [] },
-    countdown: { status: "idle", durationMs: 60000, deadline: null, pausedRemainingMs: 60000 },
+    sessionHistory: [],
+    stopwatch: { status: "idle", startedAt: null, accumulatedMs: 0, laps: [], runId: null, activityStartedAt: null },
+    countdown: { status: "idle", durationMs: 60000, deadline: null, pausedRemainingMs: 60000, runId: null, activityStartedAt: null },
     intervals: {
       status: "idle",
       config: { warmupSeconds: 60, workSeconds: 40, restSeconds: 20, rounds: 8 },
       phaseIndex: 0,
       phaseEndsAt: null,
-      pausedRemainingMs: null
+      pausedRemainingMs: null,
+      runId: null,
+      activityStartedAt: null
     }
   };
 
@@ -49,15 +52,50 @@
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
       if (!saved || saved.version !== 1) return cloneDefaults();
       const clean = cloneDefaults();
-      return {
+      const loaded = {
         ...clean, ...saved,
         stopwatch: { ...clean.stopwatch, ...saved.stopwatch },
         countdown: { ...clean.countdown, ...saved.countdown },
         intervals: { ...clean.intervals, ...saved.intervals, config: { ...clean.intervals.config, ...saved.intervals?.config } },
-        notes: Array.isArray(saved.notes) ? saved.notes : []
+        notes: Array.isArray(saved.notes) ? saved.notes : [],
+        sessionHistory: Array.isArray(saved.sessionHistory)
+          ? saved.sessionHistory.filter((item) => item && typeof item === "object").map((item, index) => ({ ...item, id: item.id || `legacy-history-${index}-${item.startedAt || item.endedAt || Date.now()}` }))
+          : []
       };
+      const seenHistoryIds = new Set();
+      loaded.sessionHistory = loaded.sessionHistory.filter((item) => {
+        if (seenHistoryIds.has(item.id)) return false;
+        seenHistoryIds.add(item.id);
+        return true;
+      });
+      migrateCurrentActivityMetadata(loaded);
+      return loaded;
     } catch (_) {
       return cloneDefaults();
+    }
+  }
+
+  function createRunId(type, timestamp = Date.now()) {
+    return `${type}-${timestamp}-${Math.random().toString(36).slice(2, 9)}`;
+  }
+
+  function migrateCurrentActivityMetadata(loaded) {
+    const now = Date.now();
+    const sw = loaded.stopwatch;
+    if (!sw.runId && (sw.status !== "idle" || sw.accumulatedMs > 0 || sw.laps.length > 0)) {
+      sw.runId = createRunId("stopwatch", now);
+      sw.activityStartedAt = sw.startedAt ? sw.startedAt - sw.accumulatedMs : now - sw.accumulatedMs;
+    }
+    const cd = loaded.countdown;
+    if (!cd.runId && cd.status !== "idle") {
+      const remaining = cd.status === "running" && cd.deadline ? Math.max(0, cd.deadline - now) : cd.pausedRemainingMs;
+      cd.runId = createRunId("countdown", now);
+      cd.activityStartedAt = now - Math.max(0, cd.durationMs - (remaining ?? cd.durationMs));
+    }
+    const timer = loaded.intervals;
+    if (!timer.runId && timer.status !== "idle") {
+      timer.runId = createRunId("intervals", now);
+      timer.activityStartedAt = now;
     }
   }
 
@@ -105,6 +143,85 @@
       if (c.restSeconds > 0 && round < c.rounds) phases.push({ type: "rest", label: "REST", durationMs: c.restSeconds * 1000, round });
     }
     return phases;
+  }
+
+  function historyTime(item) {
+    return Number(item.startedAt) || Number(item.endedAt) || 0;
+  }
+
+  function addHistoryItem(item) {
+    if (!item?.id || state.sessionHistory.some((saved) => saved.id === item.id)) return false;
+    state.sessionHistory.push(item);
+    state.sessionHistory.sort((a, b) => historyTime(a) - historyTime(b));
+    return true;
+  }
+
+  function isArchived(runId) {
+    return Boolean(runId) && state.sessionHistory.some((item) => item.id === runId);
+  }
+
+  function stopwatchSnapshot(now = Date.now(), status = null) {
+    const sw = state.stopwatch;
+    if (!sw.runId || sw.status === "idle") return null;
+    const durationMs = getStopwatchElapsed(now);
+    return {
+      id: sw.runId,
+      type: "stopwatch",
+      startedAt: sw.activityStartedAt || now - durationMs,
+      endedAt: status === "completed" ? now : null,
+      durationMs,
+      laps: [...sw.laps],
+      lapCount: sw.laps.length,
+      status: status || sw.status
+    };
+  }
+
+  function countdownSnapshot(status = null, endedAt = null) {
+    const cd = state.countdown;
+    if (!cd.runId || cd.status === "idle") return null;
+    const resolvedStatus = status || (cd.status === "finished" ? "completed" : cd.status);
+    return {
+      id: cd.runId,
+      type: "countdown",
+      startedAt: cd.activityStartedAt || Date.now(),
+      endedAt: endedAt || (resolvedStatus === "completed" || resolvedStatus === "interrupted" ? Date.now() : null),
+      durationMs: cd.durationMs,
+      status: resolvedStatus
+    };
+  }
+
+  function intervalsSnapshot(status = null, endedAt = null) {
+    const timer = state.intervals;
+    if (!timer.runId || timer.status === "idle") return null;
+    const resolvedStatus = status || (timer.status === "finished" ? "completed" : timer.status);
+    return {
+      id: timer.runId,
+      type: "intervals",
+      startedAt: timer.activityStartedAt || Date.now(),
+      endedAt: endedAt || (resolvedStatus === "completed" || resolvedStatus === "interrupted" ? Date.now() : null),
+      config: { ...timer.config },
+      status: resolvedStatus
+    };
+  }
+
+  function archiveStopwatch(now = Date.now()) {
+    const item = stopwatchSnapshot(now, "completed");
+    return item ? addHistoryItem(item) : false;
+  }
+
+  function archiveCountdown(status, endedAt = Date.now()) {
+    const item = countdownSnapshot(status, endedAt);
+    return item ? addHistoryItem(item) : false;
+  }
+
+  function archiveIntervals(status, endedAt = Date.now()) {
+    const item = intervalsSnapshot(status, endedAt);
+    return item ? addHistoryItem(item) : false;
+  }
+
+  function currentActivitySnapshots(now = Date.now()) {
+    return [stopwatchSnapshot(now), countdownSnapshot(), intervalsSnapshot()]
+      .filter((item) => item && !isArchived(item.id));
   }
 
   function isAnyTimerRunning() {
@@ -204,9 +321,11 @@
   }
 
   function finishCountdown() {
+    const completedAt = state.countdown.deadline || Date.now();
     state.countdown.status = "finished";
     state.countdown.deadline = null;
     state.countdown.pausedRemainingMs = 0;
+    archiveCountdown("completed", completedAt);
     saveState(true);
     syncWakeLock();
     signal("finish");
@@ -221,9 +340,11 @@
       timer.phaseIndex += 1;
       changed = true;
       if (timer.phaseIndex >= phases.length) {
+        const completedAt = timer.phaseEndsAt;
         timer.status = "finished";
         timer.phaseEndsAt = null;
         timer.pausedRemainingMs = 0;
+        archiveIntervals("completed", completedAt);
         saveState(true);
         syncWakeLock();
         if (notify) signal("finish");
@@ -360,17 +481,26 @@
         sw.startedAt = null;
         sw.status = "paused";
       } else {
+        if (!sw.runId) {
+          sw.runId = createRunId("stopwatch", now);
+          sw.activityStartedAt = now;
+        }
         sw.startedAt = now;
         sw.status = "running";
       }
     } else if (state.mode === "countdown") {
       const cd = state.countdown;
+      const beginsCountdown = cd.status === "idle" || cd.status === "finished";
       if (cd.status === "running") {
         cd.pausedRemainingMs = Math.max(0, cd.deadline - now);
         cd.deadline = null;
         cd.status = "paused";
       } else {
         if (cd.status === "finished") cd.pausedRemainingMs = cd.durationMs;
+        if (beginsCountdown) {
+          cd.runId = createRunId("countdown", now);
+          cd.activityStartedAt = now;
+        }
         cd.deadline = now + Math.max(1000, cd.pausedRemainingMs || cd.durationMs);
         cd.status = "running";
       }
@@ -387,6 +517,10 @@
           timer.phaseIndex = 0;
           timer.pausedRemainingMs = phases[0]?.durationMs || 0;
         }
+        if (beginsIntervalSession) {
+          timer.runId = createRunId("intervals", now);
+          timer.activityStartedAt = now;
+        }
         const phase = phases[timer.phaseIndex];
         timer.phaseEndsAt = now + Math.max(1, timer.pausedRemainingMs ?? phase.durationMs);
         timer.status = "running";
@@ -399,9 +533,17 @@
   }
 
   function resetCurrentTimer() {
-    if (state.mode === "stopwatch") state.stopwatch = cloneDefaults().stopwatch;
-    else if (state.mode === "countdown") state.countdown = { ...cloneDefaults().countdown, durationMs: state.countdown.durationMs, pausedRemainingMs: state.countdown.durationMs };
-    else state.intervals = { ...cloneDefaults().intervals, config: { ...state.intervals.config }, pausedRemainingMs: intervalPhases()[0]?.durationMs || 0 };
+    const now = Date.now();
+    if (state.mode === "stopwatch") {
+      archiveStopwatch(now);
+      state.stopwatch = cloneDefaults().stopwatch;
+    } else if (state.mode === "countdown") {
+      archiveCountdown(state.countdown.status === "finished" ? "completed" : "interrupted", now);
+      state.countdown = { ...cloneDefaults().countdown, durationMs: state.countdown.durationMs, pausedRemainingMs: state.countdown.durationMs };
+    } else {
+      archiveIntervals(state.intervals.status === "finished" ? "completed" : "interrupted", now);
+      state.intervals = { ...cloneDefaults().intervals, config: { ...state.intervals.config }, pausedRemainingMs: intervalPhases()[0]?.durationMs || 0 };
+    }
     saveState(true);
     syncWakeLock();
     renderStatic();
@@ -428,17 +570,76 @@
     return { saved: true, createdAt, noteCount: state.notes.length };
   }
 
+  function activityStatusLabel(status) {
+    return ({
+      completed: "Completado",
+      interrupted: "Interrumpido",
+      running: "En curso",
+      paused: "Pausado",
+      finished: "Completado"
+    })[status] || "Registrado";
+  }
+
+  function activitySummaryLines(item) {
+    const timestamp = historyTime(item) || state.sessionStartedAt;
+    const labels = { stopwatch: "CRONÓMETRO", countdown: "CUENTA REGRESIVA", intervals: "INTERVALOS" };
+    const lines = [`[${realTime(timestamp)}] ${labels[item.type] || item.type.toUpperCase()}`];
+    if (item.type === "stopwatch") {
+      lines.push(`Duración: ${formatClock(item.durationMs || 0, true)}`);
+      const laps = Array.isArray(item.laps) ? item.laps : [];
+      lines.push(`Vueltas: ${item.lapCount ?? laps.length}`);
+      laps.forEach((lap, index) => lines.push(`${index + 1}. ${formatClock(lap, true)}`));
+      if (item.status !== "completed") lines.push(`Estado: ${activityStatusLabel(item.status)}`);
+    } else if (item.type === "countdown") {
+      lines.push(`Duración: ${formatClock(item.durationMs || 0)}`);
+      lines.push(`Estado: ${activityStatusLabel(item.status)}`);
+    } else if (item.type === "intervals") {
+      const config = item.config || {};
+      lines.push(`Warm-up: ${config.warmupSeconds || 0} s`);
+      lines.push(`Work: ${config.workSeconds || 0} s`);
+      lines.push(`Rest: ${config.restSeconds || 0} s`);
+      lines.push(`Rondas: ${config.rounds || 0}`);
+      lines.push(`Estado: ${activityStatusLabel(item.status)}`);
+    }
+    return lines;
+  }
+
+  function activitiesForExport(now = Date.now()) {
+    const seen = new Set();
+    return [...state.sessionHistory, ...currentActivitySnapshots(now)]
+      .filter((item) => {
+        if (!item?.id || seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      })
+      .sort((a, b) => historyTime(a) - historyTime(b));
+  }
+
   function sessionSummary() {
     const start = new Date(state.sessionStartedAt);
     const date = new Intl.DateTimeFormat("es-AR", { dateStyle: "long" }).format(start);
+    const activities = activitiesForExport();
     const lines = [
       "TREINONANOGPT — SESIÓN",
       `Fecha: ${date}`,
       `Inicio: ${realTime(state.sessionStartedAt)}`,
+      "",
+      "ACTIVIDAD"
+    ];
+    if (activities.length) {
+      activities.forEach((item, index) => {
+        if (index > 0) lines.push("");
+        lines.push(...activitySummaryLines(item));
+      });
+    } else {
+      lines.push("(Sin actividad de timers)");
+    }
+    lines.push(
+      "",
       `Series contadas: ${state.sets}`,
       "",
       "NOTAS"
-    ];
+    );
     if (state.notes.length) state.notes.forEach((note) => lines.push(`[${realTime(note.createdAt)}] ${note.text}`));
     else lines.push("(Sin notas)");
     if (state.draft.trim()) lines.push("", `BORRADOR SIN AGREGAR: ${state.draft.trim()}`);
@@ -538,6 +739,7 @@
   });
   window.addEventListener("pagehide", () => saveState(true));
 
+  saveState(true);
   renderStatic();
   reconcileIntervals(Date.now(), false);
   syncWakeLock();
