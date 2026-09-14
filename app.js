@@ -39,7 +39,7 @@
   const els = {
     timerStage: $("#timerStage"), timerTitle: $("#timerTitle"),
     timerDisplay: $("#timerDisplay"), timerDetail: $("#timerDetail"), toggleTimer: $("#toggleTimer"),
-    resetTimer: $("#resetTimer"), lapTimer: $("#lapTimer"), laps: $("#laps"),
+    resetTimer: $("#resetTimer"), lapTimer: $("#lapTimer"), laps: $("#laps"), lapsPanel: $("#lapsPanel"), lapsSummary: $("#lapsSummary"),
     countdownConfig: $("#countdownConfig"), intervalConfig: $("#intervalConfig"),
     countdownMinutes: $("#countdownMinutes"), countdownSeconds: $("#countdownSeconds"),
     warmupSeconds: $("#warmupSeconds"), workSeconds: $("#workSeconds"), restSeconds: $("#restSeconds"), rounds: $("#rounds"),
@@ -274,7 +274,8 @@
       work: { frequency: 950, count: 3, duration: .25, gap: .15, volume: .36 },
       rest: { frequency: 650, count: 2, duration: .25, gap: .15, volume: .34 },
       finish: { frequency: 880, count: 3, duration: .14, gap: .03, volume: .18 },
-      phase: { frequency: 660, count: 1, duration: .14, gap: 0, volume: .18 }
+      phase: { frequency: 660, count: 1, duration: .14, gap: 0, volume: .18 },
+      action: { frequency: 1180, count: 1, duration: .1, gap: 0, volume: .14 }
     };
     const profile = profiles[kind] || profiles.phase;
     const now = audioContext.currentTime;
@@ -298,6 +299,11 @@
   function signal(kind = "phase") {
     if (audioContext?.state === "running") beep(kind);
     else if (audioContext && audioContext.state !== "closed") audioContext.resume().then(() => beep(kind)).catch(() => {});
+  }
+
+  async function confirmAction() {
+    await unlockAudio();
+    signal("action");
   }
 
   async function requestWakeLock() {
@@ -364,7 +370,7 @@
     els.countdownConfig.hidden = state.mode !== "countdown" || state.countdown.status === "running";
     els.intervalConfig.hidden = state.mode !== "intervals" || state.intervals.status === "running";
     els.lapTimer.hidden = state.mode !== "stopwatch";
-    els.laps.hidden = state.mode !== "stopwatch" || state.stopwatch.laps.length === 0;
+    els.lapsPanel.hidden = state.mode !== "stopwatch" || state.stopwatch.laps.length === 0;
 
     if (state.mode === "stopwatch") {
       const sw = state.stopwatch;
@@ -395,6 +401,7 @@
       els.timerDetail.textContent = timer.status === "finished" ? `${timer.config.rounds} rondas completadas` : phase?.round ? `Ronda ${phase.round} de ${timer.config.rounds}` : `Preparación · ${timer.config.rounds} rondas`;
       els.toggleTimer.textContent = timer.status === "running" ? "Pausar" : timer.status === "paused" ? "Reanudar" : timer.status === "finished" ? "Reiniciar" : "Iniciar";
     }
+    els.toggleTimer.classList.toggle("pause", state[state.mode].status === "running");
   }
 
   function renderStatic() {
@@ -443,9 +450,14 @@
 
   function renderLaps() {
     els.laps.replaceChildren();
+    els.lapsSummary.textContent = `${state.stopwatch.laps.length} ${state.stopwatch.laps.length === 1 ? "vuelta registrada" : "vueltas registradas"}`;
     [...state.stopwatch.laps].reverse().forEach((lap, index, reversed) => {
       const item = document.createElement("li");
-      item.textContent = `Vuelta ${reversed.length - index} · ${formatClock(lap, true)}`;
+      const label = document.createElement("span");
+      label.textContent = `Vuelta ${reversed.length - index}`;
+      const time = document.createElement("strong");
+      time.textContent = formatClock(lap, true);
+      item.append(label, time);
       els.laps.append(item);
     });
   }
@@ -472,6 +484,7 @@
 
   async function toggleCurrentTimer() {
     await unlockAudio();
+    signal("action");
     const now = Date.now();
     pauseOtherTimers(state.mode);
     if (state.mode === "stopwatch") {
@@ -532,7 +545,8 @@
     renderStatic();
   }
 
-  function resetCurrentTimer() {
+  async function resetCurrentTimer() {
+    await confirmAction();
     const now = Date.now();
     if (state.mode === "stopwatch") {
       archiveStopwatch(now);
@@ -552,6 +566,7 @@
   function addNote() {
     const text = els.noteInput.value.trim();
     if (!text) { showToast("Escribí o dictá una nota primero"); return; }
+    confirmAction();
     const createdAt = Date.now();
     state.notes.push({ id: `${createdAt}-${Math.random().toString(36).slice(2, 7)}`, text, createdAt });
     state.draft = "";
@@ -691,6 +706,7 @@
 
   function completeNewSession() {
     cancelHold();
+    confirmAction();
     releaseWakeLock();
     state = cloneDefaults();
     state.sessionStartedAt = Date.now();
@@ -701,6 +717,7 @@
   }
 
   $$(".mode-tab").forEach((button) => button.addEventListener("click", () => {
+    confirmAction();
     pauseOtherTimers(button.dataset.mode);
     state.mode = button.dataset.mode;
     saveState(true);
@@ -709,20 +726,21 @@
   }));
   els.toggleTimer.addEventListener("click", toggleCurrentTimer);
   els.resetTimer.addEventListener("click", resetCurrentTimer);
-  els.lapTimer.addEventListener("click", () => {
+  els.lapTimer.addEventListener("click", async () => {
     if (state.stopwatch.status !== "running") return;
+    await confirmAction();
     state.stopwatch.laps.push(getStopwatchElapsed());
     saveState(true);
     renderStatic();
   });
   [els.countdownMinutes, els.countdownSeconds, els.warmupSeconds, els.workSeconds, els.restSeconds, els.rounds].forEach((input) => input.addEventListener("change", updateConfigFromInputs));
-  $("#incrementSet").addEventListener("click", () => { state.sets += 1; saveState(true); renderStatic(); });
-  $("#decrementSet").addEventListener("click", () => { state.sets = Math.max(0, state.sets - 1); saveState(true); renderStatic(); });
-  $("#resetSets").addEventListener("click", () => { state.sets = 0; saveState(true); renderStatic(); });
+  $("#incrementSet").addEventListener("click", () => { confirmAction(); state.sets += 1; saveState(true); renderStatic(); });
+  $("#decrementSet").addEventListener("click", () => { confirmAction(); state.sets = Math.max(0, state.sets - 1); saveState(true); renderStatic(); });
+  $("#resetSets").addEventListener("click", () => { confirmAction(); state.sets = 0; saveState(true); renderStatic(); });
   els.noteInput.addEventListener("input", () => { state.draft = els.noteInput.value; saveState(); });
   els.noteInput.addEventListener("keydown", (event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") addNote(); });
   $("#addNote").addEventListener("click", addNote);
-  $("#copySession").addEventListener("click", copySession);
+  $("#copySession").addEventListener("click", () => { confirmAction(); copySession(); });
   els.newSession.addEventListener("pointerdown", startHold);
   ["pointerup", "pointercancel", "pointerleave"].forEach((name) => els.newSession.addEventListener(name, cancelHold));
   els.newSession.addEventListener("keydown", startHold);

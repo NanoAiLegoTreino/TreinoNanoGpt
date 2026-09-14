@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#101512">
+  <meta name="theme-color" content="#08783f">
   <meta name="description" content="Cronómetros, series y notas rápidas para entrenar sin distracciones.">
-  <meta name="color-scheme" content="dark">
+  <meta name="color-scheme" content="light">
   <link rel="manifest" href="./manifest.json">
   <link rel="icon" href="./assets/images/icons/favicon-32.png" sizes="32x32" type="image/png">
   <link rel="icon" href="./assets/images/icons/favicon-48.png" sizes="48x48" type="image/png">
@@ -59,20 +59,26 @@
         <div class="timer-controls">
           <button class="control-button secondary" id="resetTimer">Reset</button>
           <button class="control-button primary" id="toggleTimer">Iniciar</button>
-          <button class="control-button secondary" id="lapTimer">Vuelta</button>
+          <button class="control-button primary" id="lapTimer">Vuelta</button>
         </div>
-        <ol class="laps" id="laps" aria-label="Vueltas del cronómetro" hidden></ol>
+        <section class="laps-panel" id="lapsPanel" hidden aria-labelledby="lapsTitle">
+          <div class="laps-heading">
+            <h2 id="lapsTitle">Vueltas</h2>
+            <span id="lapsSummary">0 vueltas registradas</span>
+          </div>
+          <ol class="laps" id="laps" aria-label="Vueltas del cronómetro"></ol>
+        </section>
       </section>
 
       <section class="sets-card" aria-labelledby="setsTitle">
-        <div>
+        <div class="sets-heading">
           <p class="section-label" id="setsTitle">SERIES</p>
-          <output id="setCount" class="set-count" aria-live="polite">0</output>
+          <button id="resetSets" class="text-button">Reset</button>
         </div>
         <div class="set-controls">
           <button id="decrementSet" class="step-button" aria-label="Restar una serie">−1</button>
+          <output id="setCount" class="set-count" aria-live="polite">0</output>
           <button id="incrementSet" class="step-button add" aria-label="Sumar una serie">+1</button>
-          <button id="resetSets" class="text-button">Reset</button>
         </div>
       </section>
 
