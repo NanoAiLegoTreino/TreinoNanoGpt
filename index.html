@@ -25,6 +25,45 @@
     </header>
 
     <main>
+      <section class="session-card" id="sessionCard" aria-labelledby="sessionControlTitle">
+        <div id="sessionIdle">
+          <p class="section-label">SESIÓN</p>
+          <h2 id="sessionControlTitle">Preparado para entrenar</h2>
+          <p class="session-help">Al iniciar se crea y comienza automáticamente el Bloque 1.</p>
+          <button id="startSession" class="session-start-button">INICIAR SESIÓN</button>
+        </div>
+
+        <div id="blockActive" hidden>
+          <div class="block-indicator">
+            <span class="block-state-icon" id="blockStateIcon" aria-hidden="true">●</span>
+            <div>
+              <p class="block-status" id="blockStatus">BLOQUE 1 EN CURSO</p>
+              <output class="block-time" id="blockTime" aria-live="off">00:00</output>
+            </div>
+          </div>
+          <div class="block-controls">
+            <button id="toggleBlock" class="block-button secondary">PAUSAR BLOQUE</button>
+            <button id="finishBlock" class="block-button danger">FINALIZAR BLOQUE</button>
+          </div>
+        </div>
+
+        <div id="blockFinished" hidden>
+          <p class="section-label">BLOQUE FINALIZADO</p>
+          <h2 id="finishedBlockTitle">Bloque 1 guardado</h2>
+          <p class="session-help" id="finishedBlockSummary">Duración efectiva: 00:00</p>
+          <div class="block-controls">
+            <button id="nextBlock" class="block-button primary">SIGUIENTE BLOQUE</button>
+            <button id="finishSession" class="block-button secondary">FINALIZAR SESIÓN</button>
+          </div>
+        </div>
+
+        <div id="sessionFinished" hidden>
+          <p class="section-label">SESIÓN FINALIZADA</p>
+          <h2>Entrenamiento guardado</h2>
+          <p class="session-help" id="sessionFinishedSummary">Tiempo efectivo: 00:00 · Transcurrido: 00:00</p>
+        </div>
+      </section>
+
       <section class="timer-card" aria-labelledby="timerTitle">
         <nav class="mode-tabs" aria-label="Tipo de temporizador">
           <button class="mode-tab active" data-mode="stopwatch" aria-pressed="true">Cronómetro</button>
@@ -101,7 +140,7 @@
 
       <button id="copySession" class="copy-button">COPIAR PARA CHATGPT</button>
 
-      <button id="newSession" class="new-session-button" aria-label="Mantener pulsado dos segundos para iniciar una nueva sesión">
+      <button id="newSession" class="new-session-button" aria-label="Mantener pulsado dos segundos para preparar una sesión nueva y vacía">
         <span class="hold-fill" aria-hidden="true"></span>
         <span class="hold-content">NUEVA SESIÓN <small>Mantener 2 segundos</small></span>
       </button>
