@@ -3,9 +3,18 @@
 
   const STORAGE_KEY = "treinoNanoGpt.v1";
   const DEFAULT_STATE = {
-    version: 2,
+    version: 3,
     sessionStartedAt: null,
-    session: { status: "idle", startedAt: null, endedAt: null, activeBlockId: null, blocks: [] },
+    session: {
+      status: "idle",
+      startedAt: null,
+      trainingEndedAt: null,
+      closedAt: null,
+      endedAt: null,
+      finalNotes: "",
+      activeBlockId: null,
+      blocks: []
+    },
     mode: "stopwatch",
     sets: 0,
     notes: [],
@@ -40,10 +49,13 @@
   let blockToggleGuardUntil = 0;
 
   const els = {
-    sessionCard: $("#sessionCard"), sessionIdle: $("#sessionIdle"), blockActive: $("#blockActive"), blockFinished: $("#blockFinished"), sessionFinished: $("#sessionFinished"),
+    sessionCard: $("#sessionCard"), sessionIdle: $("#sessionIdle"), blockActive: $("#blockActive"), blockFinished: $("#blockFinished"),
+    sessionReview: $("#sessionReview"), sessionClosed: $("#sessionClosed"), finalNotes: $("#finalNotes"), closeSession: $("#closeSession"),
+    sessionReviewSummary: $("#sessionReviewSummary"), sessionClosedSummary: $("#sessionClosedSummary"),
+    closedFinalNotes: $("#closedFinalNotes"), closedFinalNotesText: $("#closedFinalNotesText"),
     startSession: $("#startSession"), blockStateIcon: $("#blockStateIcon"), blockStatus: $("#blockStatus"), blockTime: $("#blockTime"),
-    toggleBlock: $("#toggleBlock"), finishBlock: $("#finishBlock"), nextBlock: $("#nextBlock"), finishSession: $("#finishSession"),
-    finishedBlockTitle: $("#finishedBlockTitle"), finishedBlockSummary: $("#finishedBlockSummary"), sessionFinishedSummary: $("#sessionFinishedSummary"),
+    toggleBlock: $("#toggleBlock"), finishBlock: $("#finishBlock"), nextBlock: $("#nextBlock"), endTraining: $("#endTraining"),
+    finishedBlockTitle: $("#finishedBlockTitle"), finishedBlockSummary: $("#finishedBlockSummary"),
     timerStage: $("#timerStage"), timerTitle: $("#timerTitle"),
     timerDisplay: $("#timerDisplay"), timerDetail: $("#timerDetail"), toggleTimer: $("#toggleTimer"),
     resetTimer: $("#resetTimer"), lapTimer: $("#lapTimer"), laps: $("#laps"), lapsPanel: $("#lapsPanel"), lapsSummary: $("#lapsSummary"),
@@ -57,14 +69,14 @@
   function loadState() {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-      if (!saved || ![1, 2].includes(saved.version)) return cloneDefaults();
+      if (!saved || ![1, 2, 3].includes(saved.version)) return cloneDefaults();
       const clean = cloneDefaults();
       const loaded = {
         ...clean, ...saved,
         stopwatch: { ...clean.stopwatch, ...saved.stopwatch },
         countdown: { ...clean.countdown, ...saved.countdown },
         intervals: { ...clean.intervals, ...saved.intervals, config: { ...clean.intervals.config, ...saved.intervals?.config } },
-        version: 2,
+        version: 3,
         session: saved.session && typeof saved.session === "object"
           ? { ...clean.session, ...saved.session, blocks: Array.isArray(saved.session.blocks) ? saved.session.blocks : [] }
           : { ...clean.session },
@@ -126,7 +138,10 @@
       loaded.session = {
         status: "active",
         startedAt: Number(saved.sessionStartedAt) || now,
+        trainingEndedAt: null,
+        closedAt: null,
         endedAt: null,
+        finalNotes: "",
         activeBlockId: block.id,
         blocks: [block]
       };
@@ -145,7 +160,12 @@
         activityIds: Array.isArray(block.activityIds) ? [...new Set(block.activityIds)] : [],
         setEvents: Array.isArray(block.setEvents) ? block.setEvents : []
       }));
-      if (!["idle", "active", "finished"].includes(loaded.session.status)) loaded.session.status = "idle";
+      if (loaded.session.status === "finished") loaded.session.status = "closed";
+      if (!["idle", "active", "review", "closed"].includes(loaded.session.status)) loaded.session.status = "idle";
+      loaded.session.trainingEndedAt = Number(loaded.session.trainingEndedAt) || Number(loaded.session.endedAt) || null;
+      loaded.session.closedAt = Number(loaded.session.closedAt) || (loaded.session.status === "closed" ? loaded.session.trainingEndedAt : null);
+      loaded.session.endedAt = loaded.session.trainingEndedAt;
+      loaded.session.finalNotes = typeof loaded.session.finalNotes === "string" ? loaded.session.finalNotes : "";
       loaded.sessionStartedAt = loaded.session.startedAt || null;
       const active = loaded.session.blocks.find((block) => block.id === loaded.session.activeBlockId);
       if (loaded.session.status === "active" && loaded.session.activeBlockId && !active) loaded.session.activeBlockId = null;
@@ -241,7 +261,7 @@
 
   function sessionElapsedMs(now = Date.now()) {
     if (!state.session.startedAt) return 0;
-    const end = state.session.endedAt || now;
+    const end = state.session.trainingEndedAt || state.session.endedAt || now;
     return Math.max(0, end - state.session.startedAt);
   }
 
@@ -500,7 +520,16 @@
     if (state.session.status !== "idle") return;
     const now = Date.now();
     const block = createBlock(1, now);
-    state.session = { status: "active", startedAt: now, endedAt: null, activeBlockId: block.id, blocks: [block] };
+    state.session = {
+      status: "active",
+      startedAt: now,
+      trainingEndedAt: null,
+      closedAt: null,
+      endedAt: null,
+      finalNotes: "",
+      activeBlockId: block.id,
+      blocks: [block]
+    };
     state.sessionStartedAt = now;
     saveState(true);
     syncWakeLock();
@@ -572,17 +601,27 @@
     showToast("Bloque " + nextNumber + " iniciado");
   }
 
-  function finishCurrentSession() {
+  function endTraining() {
     if (state.session.status !== "active") return;
     const now = Date.now();
     if (currentBlock()) finishActiveBlock(now, false);
-    state.session.status = "finished";
+    state.session.status = "review";
+    state.session.trainingEndedAt = now;
     state.session.endedAt = now;
     state.session.activeBlockId = null;
     saveState(true);
     syncWakeLock();
     renderStatic();
-    showToast("Sesión finalizada");
+    showToast("Entrenamiento terminado");
+  }
+
+  function closeSession() {
+    if (state.session.status !== "review") return;
+    state.session.status = "closed";
+    state.session.closedAt = Date.now();
+    saveState(true);
+    renderStatic();
+    showToast("Sesión cerrada");
   }
 
   function finishCountdown() {
@@ -671,8 +710,11 @@
     els.sessionIdle.hidden = sessionStatus !== "idle";
     els.blockActive.hidden = !(sessionStatus === "active" && block);
     els.blockFinished.hidden = !(sessionStatus === "active" && !block && state.session.blocks.length);
-    els.sessionFinished.hidden = sessionStatus !== "finished";
+    els.sessionReview.hidden = sessionStatus !== "review";
+    els.sessionClosed.hidden = sessionStatus !== "closed";
     els.sessionCard.classList.toggle("is-live", sessionStatus === "active" && Boolean(block));
+    els.sessionCard.classList.toggle("is-review", sessionStatus === "review");
+    els.sessionCard.classList.toggle("is-closed", sessionStatus === "closed");
 
     if (block) {
       const paused = block.status === "paused";
@@ -690,18 +732,33 @@
       els.finishedBlockSummary.textContent = "Duración efectiva: " + formatClock(blockEffectiveMs(lastBlock, now));
     }
 
-    if (sessionStatus === "finished") {
-      els.sessionFinishedSummary.textContent =
-        "Tiempo efectivo: " + formatClock(sessionEffectiveMs(now)) +
+    if (sessionStatus === "review") {
+      els.sessionReviewSummary.textContent =
+        "Finalizó a las " + realTime(state.session.trainingEndedAt) +
+        " · Tiempo efectivo: " + formatClock(sessionEffectiveMs(now)) +
         " · Transcurrido: " + formatClock(sessionElapsedMs(now));
     }
 
+    if (sessionStatus === "closed") {
+      els.sessionClosedSummary.textContent =
+        "Tiempo efectivo: " + formatClock(sessionEffectiveMs(now)) +
+        " · Transcurrido: " + formatClock(sessionElapsedMs(now));
+      const hasFinalNotes = Boolean(state.session.finalNotes.trim());
+      els.closedFinalNotes.hidden = !hasFinalNotes;
+      els.closedFinalNotesText.textContent = state.session.finalNotes;
+    }
+
     const blockAvailable = sessionStatus === "active" && Boolean(block);
+    const sessionLocked = sessionStatus === "review" || sessionStatus === "closed";
     $("#incrementSet").disabled = !blockAvailable;
     $("#decrementSet").disabled = !blockAvailable;
     $("#resetSets").disabled = !blockAvailable;
     els.noteInput.disabled = !blockAvailable;
     $("#addNote").disabled = !blockAvailable;
+    els.finalNotes.disabled = sessionStatus !== "review";
+    $$(".mode-tab").forEach((button) => { button.disabled = sessionLocked; });
+    [els.countdownMinutes, els.countdownSeconds, els.warmupSeconds, els.workSeconds, els.restSeconds, els.rounds]
+      .forEach((input) => { input.disabled = sessionLocked; });
   }
 
   function renderStatic() {
@@ -712,6 +769,7 @@
     });
     els.setCount.textContent = state.sets;
     els.noteInput.value = state.draft || "";
+    els.finalNotes.value = state.session.finalNotes || "";
     els.notesCount.textContent = state.notes.length;
     els.countdownMinutes.value = Math.floor(state.countdown.durationMs / 60000);
     els.countdownSeconds.value = Math.floor((state.countdown.durationMs % 60000) / 1000);
@@ -765,6 +823,7 @@
   }
 
   function updateConfigFromInputs() {
+    if (state.session.status === "review" || state.session.status === "closed") return;
     const minutes = clampNumber(els.countdownMinutes.value, 0, 599, 1);
     const seconds = clampNumber(els.countdownSeconds.value, 0, 59, 0);
     const durationMs = Math.max(1000, (minutes * 60 + seconds) * 1000);
@@ -966,8 +1025,9 @@
     const lines = [
       "TREINONANOGPT — SESIÓN",
       `Fecha: ${date}`,
-      `Inicio: ${realTime(state.session.startedAt)}`,
-      `Fin: ${state.session.endedAt ? realTime(state.session.endedAt) : "En curso"}`,
+      `Inicio del entrenamiento: ${realTime(state.session.startedAt)}`,
+      `Fin del entrenamiento: ${state.session.trainingEndedAt ? realTime(state.session.trainingEndedAt) : "En curso"}`,
+      `Estado de la sesión: ${state.session.status === "review" ? "Entrenamiento terminado / revisión" : state.session.status === "closed" ? "Cerrada" : "Activa"}`,
       `Tiempo efectivo: ${formatClock(sessionEffectiveMs(now))}`,
       `Tiempo transcurrido: ${formatClock(sessionElapsedMs(now))}`,
       `Pausas: ${formatClock(sessionPauseMs(now))}`
@@ -975,6 +1035,7 @@
 
     state.session.blocks.forEach((block) => {
       const blockActivities = activities.filter((item) => item.blockId === block.id);
+      const blockNotes = state.notes.filter((note) => note.blockId === block.id);
       lines.push(
         "",
         `BLOQUE ${block.number}`,
@@ -994,18 +1055,30 @@
       } else {
         lines.push("(Sin actividad de timers)");
       }
+      lines.push("", "NOTAS DEL BLOQUE");
+      if (blockNotes.length) {
+        blockNotes.forEach((note) => lines.push(`[${realTime(note.createdAt)}] ${note.text}`));
+      } else {
+        lines.push("(Sin notas del bloque)");
+      }
     });
 
-    lines.push("", `Series contadas (valor actual): ${state.sets}`, "", "NOTAS");
-    if (state.notes.length) {
-      state.notes.forEach((note) => {
-        const block = blockById(note.blockId);
-        const blockLabel = block ? ` | BLOQUE ${block.number}` : "";
-        lines.push(`[${realTime(note.createdAt)}${blockLabel}] ${note.text}`);
-      });
+    const unassignedNotes = state.notes.filter((note) => !blockById(note.blockId));
+    lines.push("", `Series contadas (valor actual): ${state.sets}`);
+    if (unassignedNotes.length) {
+      lines.push("", "NOTAS GENERALES IMPORTADAS");
+      unassignedNotes.forEach((note) => lines.push(`[${realTime(note.createdAt)}] ${note.text}`));
     }
-    else lines.push("(Sin notas)");
     if (state.draft.trim()) lines.push("", `BORRADOR SIN AGREGAR: ${state.draft.trim()}`);
+    lines.push(
+      "",
+      "NOTAS FINALES DE LA SESIÓN",
+      state.session.finalNotes.trim() || "(Sin notas finales)",
+      "",
+      "FIN DEL ENTRENAMIENTO",
+      state.session.trainingEndedAt ? realTime(state.session.trainingEndedAt) : "En curso"
+    );
+    if (state.session.closedAt) lines.push(`Sesión cerrada: ${realTime(state.session.closedAt)}`);
     lines.push("", "— Exportado desde TreinoNanoGpt");
     return lines.join(String.fromCharCode(10));
   }
@@ -1067,8 +1140,10 @@
   els.toggleBlock.addEventListener("click", () => { confirmAction(); toggleCurrentBlock(); });
   els.finishBlock.addEventListener("click", () => { confirmAction(); finishActiveBlock(); });
   els.nextBlock.addEventListener("click", () => { confirmAction(); startNextBlock(); });
-  els.finishSession.addEventListener("click", () => { confirmAction(); finishCurrentSession(); });
+  els.endTraining.addEventListener("click", () => { confirmAction(); endTraining(); });
+  els.closeSession.addEventListener("click", () => { confirmAction(); closeSession(); });
   $$(".mode-tab").forEach((button) => button.addEventListener("click", () => {
+    if (state.session.status === "review" || state.session.status === "closed") return;
     confirmAction();
     pauseOtherTimers(button.dataset.mode);
     state.mode = button.dataset.mode;
@@ -1114,6 +1189,11 @@
     renderStatic();
   });
   els.noteInput.addEventListener("input", () => { state.draft = els.noteInput.value; saveState(); });
+  els.finalNotes.addEventListener("input", () => {
+    if (state.session.status !== "review") return;
+    state.session.finalNotes = els.finalNotes.value;
+    saveState();
+  });
   els.noteInput.addEventListener("keydown", (event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") addNote(); });
   $("#addNote").addEventListener("click", addNote);
   $("#copySession").addEventListener("click", () => { confirmAction(); copySession(); });

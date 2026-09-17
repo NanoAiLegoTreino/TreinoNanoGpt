@@ -47,15 +47,16 @@ La opción de instalación puede tardar unos segundos en aparecer durante la pri
 
 ## Comportamiento técnico
 
-- **Sesión y bloques:** `INICIAR SESIÓN` crea automáticamente el Bloque 1. Cada bloque conserva inicio, fin, tiempo efectivo, pausas, actividades, notas y acciones del contador de series asociadas mediante un identificador estable. Finalizar un bloque archiva de forma segura cualquier timer con actividad antes de ofrecer `SIGUIENTE BLOQUE` o `FINALIZAR SESIÓN`.
+- **Sesión y bloques:** `INICIAR SESIÓN` crea automáticamente el Bloque 1. Cada bloque conserva inicio, fin, tiempo efectivo, pausas, actividades, notas y acciones del contador de series asociadas mediante un identificador estable. Finalizar un bloque archiva de forma segura cualquier timer con actividad antes de ofrecer `SIGUIENTE BLOQUE` o `TERMINAR ENTRENAMIENTO`.
+- **Revisión y cierre:** `TERMINAR ENTRENAMIENTO` fija la hora real de finalización y pasa la sesión a revisión sin aumentar su duración. En revisión solo pueden editarse las notas finales de la sesión. `CERRAR SESIÓN` deja todos los datos en modo de solo lectura.
 - **Pausas:** pausar un bloque congela su tiempo efectivo y pausa cualquier timer de ejercicio que estuviera en marcha. El tiempo transcurrido de sesión continúa y permite distinguirlo del tiempo efectivo acumulado.
 - **Timers robustos:** `setInterval` solo refresca la pantalla. El tiempo real se calcula desde timestamps absolutos (`Date.now()`), incluidos deadlines de countdown e intervalos. Si Android suspende la pestaña, al regresar se reconstruye el tiempo correcto y se saltan las fases ya transcurridas.
-- **Autoguardado:** historial de actividades, estado de sesión, bloques, pausas, borrador, notas, series, configuraciones y timers se guardan en `localStorage`. Un bloque o timer en marcha conserva sus timestamps y se recupera al reabrir.
-- **Compatibilidad de estado:** el estado actual usa `version: 2`. Las sesiones guardadas con `version: 1` se migran localmente y su contenido se vincula a un Bloque 1 sin borrarlo.
+- **Autoguardado:** historial de actividades, estado de sesión, bloques, pausas, borrador, notas de bloque, notas finales, series, configuraciones y timers se guardan en `localStorage`. Una sesión en revisión se recupera con sus notas editables después de recargar o reabrir.
+- **Compatibilidad de estado:** el estado actual usa `version: 3`. Los estados guardados con `version: 1` o `version: 2` se migran localmente sin borrar su contenido; las sesiones que ya estaban finalizadas pasan a estado cerrado.
 - **Wake Lock:** se solicita mientras haya un bloque o timer en marcha, se libera al pausar/finalizar y se vuelve a solicitar al regresar al foreground. Algunos modos de ahorro de batería o versiones de Chrome pueden rechazarlo; los tiempos siguen funcionando correctamente.
 - **Sonido:** el `AudioContext` se crea o reactiva tras tocar Iniciar/Reanudar, como exige Chrome Android. Cada WORK comienza con tres pitidos agudos de 950 Hz y cada REST con dos pitidos graves de 650 Hz; duran 250 ms y se separan 150 ms. El final conserva su secuencia propia.
 - **Portapapeles:** primero usa Clipboard API. Si el navegador la rechaza, se abre un diálogo con todo el resumen seleccionado para copiar manualmente.
-- **Historial exportable:** resetear un timer con actividad lo archiva dentro de su bloque; countdown e intervalos también se archivan al completarse. Copiar agrupa todos los datos como sesión → bloques → actividades e incluye cualquier timer actual todavía no reseteado, sin modificar ni duplicar el estado.
+- **Historial exportable:** resetear un timer con actividad lo archiva dentro de su bloque; countdown e intervalos también se archivan al completarse. Copiar agrupa los datos como sesión → bloques → actividades → notas del bloque, y agrega por separado las notas finales y la hora de fin del entrenamiento.
 - **Nueva sesión:** exige mantener pulsado el botón durante dos segundos, también con Enter o Espacio desde teclado. Al completarse elimina la sesión local actual, incluido su historial, y deja la app preparada para tocar `INICIAR SESIÓN`; no afecta ningún otro dato del teléfono o navegador.
 
 ## Limitaciones conocidas
@@ -73,6 +74,6 @@ Cada vez que se publique una versión con cambios en archivos estáticos:
 2. Agregar a `APP_SHELL` cualquier archivo estático nuevo y quitar los eliminados.
 3. Publicar todos los archivos juntos.
 
-La versión de caché actual es `treino-nano-gpt-v8`.
+La versión de caché actual es `treino-nano-gpt-v9`.
 
 El service worker nuevo precarga la versión completa, toma control y elimina cachés anteriores. La navegación intenta primero la red y usa el HTML guardado solo cuando no hay conexión; los demás recursos se sirven rápido desde caché y se actualizan en segundo plano.

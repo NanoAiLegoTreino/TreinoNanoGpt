@@ -101,6 +101,16 @@ main { display: grid; gap: 14px; }
   border-color: #a9cdb5;
   box-shadow: 0 8px 24px rgba(7, 101, 54, .18);
 }
+.session-card.is-review {
+  border: 2px solid #8a6655;
+  background: #f6f1ed;
+  box-shadow: 0 8px 24px rgba(74, 50, 39, .14);
+}
+.session-card.is-review .section-label { color: #754838; }
+.session-card.is-closed {
+  border-color: #aeb7b1;
+  background: #f4f6f4;
+}
 .session-help {
   margin-top: 8px;
   color: var(--muted);
@@ -185,6 +195,48 @@ main { display: grid; gap: 14px; }
   border: 2px solid var(--red);
   color: var(--red-deep);
 }
+.final-notes-input {
+  min-height: 160px;
+  margin-top: 15px;
+  background: #fff;
+}
+.final-notes-help {
+  margin-top: 8px;
+  color: #665850;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+.close-session-button {
+  width: 100%;
+  min-height: 62px;
+  margin-top: 14px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--charcoal);
+  color: #fff;
+  font-size: 1.16rem;
+  font-weight: 880;
+}
+.closed-final-notes {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid var(--line);
+}
+.closed-final-notes strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--green-deep);
+  font-size: 1rem;
+}
+.closed-final-notes p {
+  color: var(--text);
+  font-size: 1.08rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 
 .timer-card { padding: 10px; overflow: hidden; }
 
@@ -215,6 +267,7 @@ main { display: grid; gap: 14px; }
   color: var(--green-deep);
   box-shadow: 0 2px 8px rgba(21, 64, 39, .12), inset 0 0 0 1px #b9d3c1;
 }
+.mode-tab:disabled { opacity: .5; cursor: default; }
 
 .timer-stage { padding: 34px 5px 30px; text-align: center; }
 .timer-stage.phase-work .timer-kicker { color: var(--green); }

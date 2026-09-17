@@ -53,14 +53,28 @@
           <p class="session-help" id="finishedBlockSummary">Duración efectiva: 00:00</p>
           <div class="block-controls">
             <button id="nextBlock" class="block-button primary">SIGUIENTE BLOQUE</button>
-            <button id="finishSession" class="block-button secondary">FINALIZAR SESIÓN</button>
+            <button id="endTraining" class="block-button secondary">TERMINAR ENTRENAMIENTO</button>
           </div>
         </div>
 
-        <div id="sessionFinished" hidden>
-          <p class="section-label">SESIÓN FINALIZADA</p>
+        <div id="sessionReview" class="session-review" hidden>
+          <p class="section-label">ENTRENAMIENTO TERMINADO · REVISIÓN</p>
+          <h2>Notas finales de la sesión</h2>
+          <p class="session-help" id="sessionReviewSummary">El tiempo del entrenamiento ya quedó detenido.</p>
+          <label class="sr-only" for="finalNotes">Notas finales de la sesión</label>
+          <textarea id="finalNotes" class="final-notes-input" rows="5" placeholder="Escribí o dictá aquí cómo terminó la sesión, sensaciones generales o cualquier detalle final…"></textarea>
+          <p class="final-notes-help">Se guardan automáticamente y pertenecen a toda la sesión.</p>
+          <button id="closeSession" class="close-session-button">CERRAR SESIÓN</button>
+        </div>
+
+        <div id="sessionClosed" hidden>
+          <p class="section-label">SESIÓN CERRADA</p>
           <h2>Entrenamiento guardado</h2>
-          <p class="session-help" id="sessionFinishedSummary">Tiempo efectivo: 00:00 · Transcurrido: 00:00</p>
+          <p class="session-help" id="sessionClosedSummary">Tiempo efectivo: 00:00 · Transcurrido: 00:00</p>
+          <div class="closed-final-notes" id="closedFinalNotes" hidden>
+            <strong>Notas finales</strong>
+            <p id="closedFinalNotesText"></p>
+          </div>
         </div>
       </section>
 
